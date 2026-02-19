@@ -21,7 +21,7 @@ func BuildMetricsPayload(md pmetric.Metrics) MetricsPayload {
 
 			metrics := sms.At(j).Metrics()
 			for k := 0; k < metrics.Len(); k++ {
-				metricsOut = append(metricsOut, BuildMetric(rms.At(i).Resource().Attributes(), scope, metrics.At(k)))
+				metricsOut = append(metricsOut, BuildMetric(rms.At(i).Resource().Attributes(), scope, metrics.At(k), false))
 			}
 		}
 	}
@@ -34,7 +34,8 @@ func BuildMetricsPayload(md pmetric.Metrics) MetricsPayload {
 }
 
 // BuildMetric creates a detailed projection for one metric candidate with its resource/scope context.
-func BuildMetric(resourceAttrs pcommon.Map, scope pcommon.InstrumentationScope, metric pmetric.Metric) Metric {
+// If verboseMetrics is true, histogram datapoints include bucket_counts and explicit_bounds.
+func BuildMetric(resourceAttrs pcommon.Map, scope pcommon.InstrumentationScope, metric pmetric.Metric, verboseMetrics bool) Metric {
 	return Metric{
 		Name:               metric.Name(),
 		Description:        metric.Description(),
@@ -46,11 +47,11 @@ func BuildMetric(resourceAttrs pcommon.Map, scope pcommon.InstrumentationScope, 
 			Version:    scope.Version(),
 			Attributes: mapFromAttrs(scope.Attributes()),
 		},
-		DataPoints: buildMetricDataPoints(metric),
+		DataPoints: buildMetricDataPoints(metric, verboseMetrics),
 	}
 }
 
-func buildMetricDataPoints(metric pmetric.Metric) []MetricDataPoint {
+func buildMetricDataPoints(metric pmetric.Metric, verboseMetrics bool) []MetricDataPoint {
 	points := make([]MetricDataPoint, 0)
 
 	switch metric.Type() {
@@ -73,14 +74,19 @@ func buildMetricDataPoints(metric pmetric.Metric) []MetricDataPoint {
 		points = make([]MetricDataPoint, 0, dps.Len())
 		for i := 0; i < dps.Len(); i++ {
 			dp := dps.At(i)
-			points = append(points, MetricDataPoint{
+			entry := MetricDataPoint{
 				StartTimeUnixNano: uint64(dp.StartTimestamp()),
 				TimeUnixNano:      uint64(dp.Timestamp()),
 				Attributes:        mapFromAttrs(dp.Attributes()),
 				Count:             dp.Count(),
 				Sum:               dp.Sum(),
 				Flags:             uint32(dp.Flags()),
-			})
+			}
+			if verboseMetrics {
+				entry.BucketCounts = uint64Slice(dp.BucketCounts())
+				entry.ExplicitBounds = float64Slice(dp.ExplicitBounds())
+			}
+			points = append(points, entry)
 		}
 	case pmetric.MetricTypeSummary:
 		dps := metric.Summary().DataPoints()
@@ -137,6 +143,28 @@ func numberDataPointToModel(dp pmetric.NumberDataPoint) MetricDataPoint {
 		out.Value = dp.DoubleValue()
 	}
 
+	return out
+}
+
+func uint64Slice(src pcommon.UInt64Slice) []uint64 {
+	if src.Len() == 0 {
+		return nil
+	}
+	out := make([]uint64, 0, src.Len())
+	for i := 0; i < src.Len(); i++ {
+		out = append(out, src.At(i))
+	}
+	return out
+}
+
+func float64Slice(src pcommon.Float64Slice) []float64 {
+	if src.Len() == 0 {
+		return nil
+	}
+	out := make([]float64, 0, src.Len())
+	for i := 0; i < src.Len(); i++ {
+		out = append(out, src.At(i))
+	}
 	return out
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/utrack/otellens/internal/capture"
@@ -66,9 +67,10 @@ func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session, err := h.registry.Register(ctx, capture.RegisterRequest{
-		Filter:     requestToFilter(req),
-		MaxBatches: req.MaxBatches,
-		BufferSize: req.MaxBatches,
+		Filter:         requestToFilter(req),
+		VerboseMetrics: req.VerboseMetrics,
+		MaxBatches:     req.MaxBatches,
+		BufferSize:     req.MaxBatches,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -138,30 +140,44 @@ func requestToFilter(req StreamRequest) capture.Filter {
 		signals[signal] = struct{}{}
 	}
 
-	metricNames := make(map[string]struct{}, len(req.MetricNames))
-	for _, metricName := range req.MetricNames {
-		metricNames[metricName] = struct{}{}
-	}
-
-	spanNames := make(map[string]struct{}, len(req.SpanNames))
-	for _, spanName := range req.SpanNames {
-		spanNames[spanName] = struct{}{}
-	}
-
-	attributeNames := make(map[string]struct{}, len(req.AttributeNames))
-	for _, attributeName := range req.AttributeNames {
-		attributeNames[attributeName] = struct{}{}
-	}
+	metricNames, metricNamesExclude := parseExactFilterValues(req.MetricNames)
+	spanNames, spanNamesExclude := parseExactFilterValues(req.SpanNames)
+	attributeNames, attributeExclude := parseExactFilterValues(req.AttributeNames)
 
 	return capture.Filter{
 		Signals:            signals,
 		MetricNames:        metricNames,
+		MetricNamesExclude: metricNamesExclude,
 		SpanNames:          spanNames,
+		SpanNamesExclude:   spanNamesExclude,
 		AttributeNames:     attributeNames,
+		AttributeExclude:   attributeExclude,
 		LogBodyContains:    req.LogBodyContains,
 		MinSeverityNumber:  plog.SeverityNumber(req.MinSeverityNumber),
 		ResourceAttributes: req.ResourceAttributes,
 	}
+}
+
+func parseExactFilterValues(values []string) (map[string]struct{}, map[string]struct{}) {
+	include := make(map[string]struct{}, len(values))
+	exclude := make(map[string]struct{}, len(values))
+
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if strings.HasPrefix(value, "!") {
+			excluded := strings.TrimSpace(strings.TrimPrefix(value, "!"))
+			if excluded != "" {
+				exclude[excluded] = struct{}{}
+			}
+			continue
+		}
+		include[value] = struct{}{}
+	}
+
+	return include, exclude
 }
 
 func (h *Handler) writeErr(w http.ResponseWriter, code int, message string) {

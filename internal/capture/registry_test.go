@@ -147,6 +147,69 @@ func TestRegistryPublishMetrics_EmitsOnlyMatchingMetrics(t *testing.T) {
 	}
 }
 
+func TestRegistryPublishMetrics_VerboseMetricsControlsHistogramBuckets(t *testing.T) {
+	testCases := []struct {
+		name           string
+		verboseMetrics bool
+		expectBuckets  bool
+	}{
+		{name: "default concise metrics", verboseMetrics: false, expectBuckets: false},
+		{name: "verbose metrics", verboseMetrics: true, expectBuckets: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			registry := NewRegistry(2)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			session, err := registry.Register(ctx, RegisterRequest{
+				Filter: Filter{
+					Signals:     map[model.SignalType]struct{}{model.SignalMetrics: {}},
+					MetricNames: map[string]struct{}{"hist.metric": {}},
+				},
+				VerboseMetrics: tc.verboseMetrics,
+				MaxBatches:     1,
+				BufferSize:     1,
+			})
+			if err != nil {
+				t.Fatalf("register failed: %v", err)
+			}
+
+			md := pmetric.NewMetrics()
+			rm := md.ResourceMetrics().AppendEmpty()
+			sm := rm.ScopeMetrics().AppendEmpty()
+			metric := sm.Metrics().AppendEmpty()
+			metric.SetName("hist.metric")
+			dp := metric.SetEmptyHistogram().DataPoints().AppendEmpty()
+			dp.SetCount(2)
+			dp.SetSum(3)
+			dp.ExplicitBounds().FromRaw([]float64{1, 2})
+			dp.BucketCounts().FromRaw([]uint64{1, 1, 0})
+
+			registry.PublishMetrics(md)
+
+			select {
+			case event := <-session.Events():
+				payload, ok := event.Payload.(*model.MetricsPayload)
+				if !ok {
+					t.Fatalf("unexpected payload type: %T", event.Payload)
+				}
+				if len(payload.Metrics) != 1 || len(payload.Metrics[0].DataPoints) != 1 {
+					t.Fatalf("expected one metric with one datapoint, got %+v", payload)
+				}
+				detail := payload.Metrics[0].DataPoints[0]
+				hasBuckets := len(detail.BucketCounts) > 0 || len(detail.ExplicitBounds) > 0
+				if hasBuckets != tc.expectBuckets {
+					t.Fatalf("bucket fields mismatch: expect=%v got_counts=%v got_bounds=%v", tc.expectBuckets, detail.BucketCounts, detail.ExplicitBounds)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("expected emitted metrics event")
+			}
+		})
+	}
+}
+
 func newMetricsBatch(name string) pmetric.Metrics {
 	md := pmetric.NewMetrics()
 	rm := md.ResourceMetrics().AppendEmpty()

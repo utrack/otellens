@@ -61,6 +61,8 @@ type MetricDataPoint struct {
 	Value             interface{}            `json:"value,omitempty"`
 	Count             uint64                 `json:"count,omitempty"`
 	Sum               float64                `json:"sum,omitempty"`
+	BucketCounts      []uint64               `json:"bucket_counts,omitempty"`
+	ExplicitBounds    []float64              `json:"explicit_bounds,omitempty"`
 	QuantileValues    []QuantileValue        `json:"quantile_values,omitempty"`
 	Flags             uint32                 `json:"flags,omitempty"`
 }

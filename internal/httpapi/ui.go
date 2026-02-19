@@ -121,18 +121,18 @@ const uiPage = `<!doctype html>
           </div>
 
           <div class="row">
-            <label for="metric_names">metric_names (comma-separated)</label>
-            <input id="metric_names" placeholder="http.server.request.duration" />
+            <label for="metric_names">metric_names (comma-separated, prefix with ! for NOT)</label>
+            <input id="metric_names" placeholder="http.server.request.duration,!foo,!bar" />
           </div>
 
           <div class="row">
-            <label for="span_names">span_names (comma-separated)</label>
-            <input id="span_names" placeholder="GET /v1/orders" />
+            <label for="span_names">span_names (comma-separated, prefix with ! for NOT)</label>
+            <input id="span_names" placeholder="GET /v1/orders,!POST /health" />
           </div>
 
           <div class="row">
-            <label for="attribute_names">attribute_names (comma-separated keys)</label>
-            <input id="attribute_names" placeholder="service.name,http.route" />
+            <label for="attribute_names">attribute_names (comma-separated keys, prefix with ! for NOT)</label>
+            <input id="attribute_names" placeholder="client_name,!blocked" />
           </div>
 
           <div class="row">
@@ -158,6 +158,10 @@ const uiPage = `<!doctype html>
           <div class="row">
             <label for="timeout_seconds">timeout_seconds</label>
             <input id="timeout_seconds" type="number" min="0" value="30" required />
+          </div>
+
+          <div class="row">
+            <label class="chip"><input id="verbose_metrics" type="checkbox" /> verbose_metrics (include histogram bucket_counts/explicit_bounds)</label>
           </div>
 
           <div class="btns">
@@ -306,6 +310,7 @@ const uiPage = `<!doctype html>
         resource_attributes: parseResourceAttributes(document.getElementById('resource_attributes').value),
         log_body_contains: document.getElementById('log_body_contains').value.trim(),
         min_severity_number: Number(document.getElementById('min_severity_number').value || 0),
+        verbose_metrics: document.getElementById('verbose_metrics').checked,
         max_batches: Number(document.getElementById('max_batches').value || 15),
         timeout_seconds: Number(document.getElementById('timeout_seconds').value || 30),
       };

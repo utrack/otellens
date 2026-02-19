@@ -11,6 +11,7 @@ type StreamRequest struct {
 	LogBodyContains    string             `json:"log_body_contains"`
 	MinSeverityNumber  int32              `json:"min_severity_number"`
 	ResourceAttributes map[string]string  `json:"resource_attributes"`
+	VerboseMetrics     bool               `json:"verbose_metrics"`
 	MaxBatches         int                `json:"max_batches"`
 	TimeoutSeconds     int                `json:"timeout_seconds"`
 }

@@ -14,8 +14,11 @@ import (
 type Filter struct {
 	Signals            map[model.SignalType]struct{}
 	MetricNames        map[string]struct{}
+	MetricNamesExclude map[string]struct{}
 	SpanNames          map[string]struct{}
+	SpanNamesExclude   map[string]struct{}
 	AttributeNames     map[string]struct{}
+	AttributeExclude   map[string]struct{}
 	LogBodyContains    string
 	MinSeverityNumber  plog.SeverityNumber
 	ResourceAttributes map[string]string
@@ -54,6 +57,9 @@ func (f Filter) MatchMetric(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, m
 			return false
 		}
 	}
+	if _, excluded := f.MetricNamesExclude[metric.Name()]; excluded {
+		return false
+	}
 	if !f.matchMetricAttributeNames(resourceAttrs, scopeAttrs, metric) {
 		return false
 	}
@@ -84,6 +90,9 @@ func (f Filter) MatchTraces(td ptrace.Traces) bool {
 					if _, ok := f.SpanNames[span.Name()]; !ok {
 						continue
 					}
+				}
+				if _, excluded := f.SpanNamesExclude[span.Name()]; excluded {
+					continue
 				}
 				if !f.matchTraceAttributeNames(rs.Resource().Attributes(), ss.Scope().Attributes(), span) {
 					continue
@@ -154,52 +163,60 @@ func (f Filter) matchResourceAttrs(attrs pcommon.Map) bool {
 }
 
 func (f Filter) matchMetricAttributeNames(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, metric pmetric.Metric) bool {
+	if f.containsAnyKey(resourceAttrs, f.AttributeExclude) ||
+		f.containsAnyKey(scopeAttrs, f.AttributeExclude) ||
+		f.metricDataPointsContainAnyKey(metric, f.AttributeExclude) {
+		return false
+	}
 	if len(f.AttributeNames) == 0 {
 		return true
 	}
-	if f.containsAnyKey(resourceAttrs) {
+	if f.containsAnyKey(resourceAttrs, f.AttributeNames) {
 		return true
 	}
-	if f.containsAnyKey(scopeAttrs) {
+	if f.containsAnyKey(scopeAttrs, f.AttributeNames) {
 		return true
 	}
-	return f.metricDataPointsContainAnyKey(metric)
+	return f.metricDataPointsContainAnyKey(metric, f.AttributeNames)
 }
 
-func (f Filter) metricDataPointsContainAnyKey(metric pmetric.Metric) bool {
+func (f Filter) metricDataPointsContainAnyKey(metric pmetric.Metric, keys map[string]struct{}) bool {
+	if len(keys) == 0 {
+		return false
+	}
 	switch metric.Type() {
 	case pmetric.MetricTypeGauge:
 		dps := metric.Gauge().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			if f.containsAnyKey(dps.At(i).Attributes()) {
+			if f.containsAnyKey(dps.At(i).Attributes(), keys) {
 				return true
 			}
 		}
 	case pmetric.MetricTypeSum:
 		dps := metric.Sum().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			if f.containsAnyKey(dps.At(i).Attributes()) {
+			if f.containsAnyKey(dps.At(i).Attributes(), keys) {
 				return true
 			}
 		}
 	case pmetric.MetricTypeHistogram:
 		dps := metric.Histogram().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			if f.containsAnyKey(dps.At(i).Attributes()) {
+			if f.containsAnyKey(dps.At(i).Attributes(), keys) {
 				return true
 			}
 		}
 	case pmetric.MetricTypeSummary:
 		dps := metric.Summary().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			if f.containsAnyKey(dps.At(i).Attributes()) {
+			if f.containsAnyKey(dps.At(i).Attributes(), keys) {
 				return true
 			}
 		}
 	case pmetric.MetricTypeExponentialHistogram:
 		dps := metric.ExponentialHistogram().DataPoints()
 		for i := 0; i < dps.Len(); i++ {
-			if f.containsAnyKey(dps.At(i).Attributes()) {
+			if f.containsAnyKey(dps.At(i).Attributes(), keys) {
 				return true
 			}
 		}
@@ -209,21 +226,31 @@ func (f Filter) metricDataPointsContainAnyKey(metric pmetric.Metric) bool {
 }
 
 func (f Filter) matchTraceAttributeNames(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, span ptrace.Span) bool {
-	if len(f.AttributeNames) == 0 {
-		return true
-	}
-	if f.containsAnyKey(resourceAttrs) {
-		return true
-	}
-	if f.containsAnyKey(scopeAttrs) {
-		return true
-	}
-	if f.containsAnyKey(span.Attributes()) {
-		return true
+	if f.containsAnyKey(resourceAttrs, f.AttributeExclude) ||
+		f.containsAnyKey(scopeAttrs, f.AttributeExclude) ||
+		f.containsAnyKey(span.Attributes(), f.AttributeExclude) {
+		return false
 	}
 	events := span.Events()
 	for i := 0; i < events.Len(); i++ {
-		if f.containsAnyKey(events.At(i).Attributes()) {
+		if f.containsAnyKey(events.At(i).Attributes(), f.AttributeExclude) {
+			return false
+		}
+	}
+	if len(f.AttributeNames) == 0 {
+		return true
+	}
+	if f.containsAnyKey(resourceAttrs, f.AttributeNames) {
+		return true
+	}
+	if f.containsAnyKey(scopeAttrs, f.AttributeNames) {
+		return true
+	}
+	if f.containsAnyKey(span.Attributes(), f.AttributeNames) {
+		return true
+	}
+	for i := 0; i < events.Len(); i++ {
+		if f.containsAnyKey(events.At(i).Attributes(), f.AttributeNames) {
 			return true
 		}
 	}
@@ -232,23 +259,28 @@ func (f Filter) matchTraceAttributeNames(resourceAttrs pcommon.Map, scopeAttrs p
 }
 
 func (f Filter) matchLogAttributeNames(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, logAttrs pcommon.Map) bool {
+	if f.containsAnyKey(resourceAttrs, f.AttributeExclude) ||
+		f.containsAnyKey(scopeAttrs, f.AttributeExclude) ||
+		f.containsAnyKey(logAttrs, f.AttributeExclude) {
+		return false
+	}
 	if len(f.AttributeNames) == 0 {
 		return true
 	}
-	if f.containsAnyKey(resourceAttrs) {
+	if f.containsAnyKey(resourceAttrs, f.AttributeNames) {
 		return true
 	}
-	if f.containsAnyKey(scopeAttrs) {
+	if f.containsAnyKey(scopeAttrs, f.AttributeNames) {
 		return true
 	}
-	return f.containsAnyKey(logAttrs)
+	return f.containsAnyKey(logAttrs, f.AttributeNames)
 }
 
-func (f Filter) containsAnyKey(attrs pcommon.Map) bool {
-	if len(f.AttributeNames) == 0 {
-		return true
+func (f Filter) containsAnyKey(attrs pcommon.Map, keys map[string]struct{}) bool {
+	if len(keys) == 0 {
+		return false
 	}
-	for key := range f.AttributeNames {
+	for key := range keys {
 		if _, ok := attrs.Get(key); ok {
 			return true
 		}

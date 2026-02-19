@@ -79,6 +79,64 @@ func TestFilterMatchMetrics_FieldANDValueOR(t *testing.T) {
 	}
 }
 
+func TestFilterMatchMetrics_NotMetricNames(t *testing.T) {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	sm := rm.ScopeMetrics().AppendEmpty()
+
+	foo := sm.Metrics().AppendEmpty()
+	foo.SetName("foo")
+	fooDP := foo.SetEmptyGauge().DataPoints().AppendEmpty()
+	fooDP.Attributes().PutStr("client_name", "a")
+	fooDP.SetDoubleValue(1)
+
+	baz := sm.Metrics().AppendEmpty()
+	baz.SetName("baz")
+	bazDP := baz.SetEmptyGauge().DataPoints().AppendEmpty()
+	bazDP.Attributes().PutStr("client_name", "b")
+	bazDP.SetDoubleValue(1)
+
+	f := Filter{
+		Signals:            map[model.SignalType]struct{}{model.SignalMetrics: {}},
+		MetricNamesExclude: map[string]struct{}{"foo": {}, "bar": {}},
+		AttributeNames:     map[string]struct{}{"client_name": {}},
+	}
+	if !f.MatchMetrics(md) {
+		t.Fatal("expected match for metric with required attribute and not excluded name")
+	}
+
+	baz.SetName("bar")
+	if f.MatchMetrics(md) {
+		t.Fatal("expected no match when all candidates are excluded by metric name")
+	}
+}
+
+func TestFilterMatchMetrics_NotAttributeNames(t *testing.T) {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	sm := rm.ScopeMetrics().AppendEmpty()
+
+	metric := sm.Metrics().AppendEmpty()
+	metric.SetName("http.server.request.duration")
+	dp := metric.SetEmptyGauge().DataPoints().AppendEmpty()
+	dp.Attributes().PutStr("client_name", "web")
+	dp.SetDoubleValue(1)
+
+	f := Filter{
+		Signals:          map[model.SignalType]struct{}{model.SignalMetrics: {}},
+		AttributeNames:   map[string]struct{}{"client_name": {}},
+		AttributeExclude: map[string]struct{}{"blocked": {}},
+	}
+	if !f.MatchMetrics(md) {
+		t.Fatal("expected initial match")
+	}
+
+	dp.Attributes().PutStr("blocked", "1")
+	if f.MatchMetrics(md) {
+		t.Fatal("expected no match when excluded attribute key is present")
+	}
+}
+
 func TestFilterMatchTracesByAttributeNameAcrossLevels(t *testing.T) {
 	td := ptrace.NewTraces()
 	rs := td.ResourceSpans().AppendEmpty()

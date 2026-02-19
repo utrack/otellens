@@ -36,12 +36,25 @@ Request example:
 ```json
 {
   "signals": ["metrics"],
-  "metric_names": ["A"],
+  "metric_names": ["A", "!foo", "!bar"],
   "attribute_names": ["service.name", "http.route"],
+  "verbose_metrics": true,
   "max_batches": 15,
   "timeout_seconds": 30
 }
 ```
+
+For exact-match NOT filters, prefix a value with `!`:
+
+- `metric_names`: include/exclude metric names
+- `span_names`: include/exclude span names
+- `attribute_names`: include/exclude attribute keys
+
+Example: `attribute_names=["client_name"]` and `metric_names=["!foo","!bar"]` means
+"metrics that have `client_name` and whose metric name is not `foo` or `bar`".
+
+Set `verbose_metrics=true` to include histogram datapoint fields `bucket_counts` and `explicit_bounds`.
+By default (`verbose_metrics=false`), those fields are omitted for lower payload size.
 
 `attribute_names` matches on OTEL attribute keys found in parsed attribute maps across signal structures:
 
@@ -62,6 +75,7 @@ Built-in web UI for interactive live capture:
 
 - start/stop streaming sessions
 - configure all request filters (`signals`, `metric_names`, `span_names`, `attribute_names`, `resource_attributes`, `log_body_contains`, `min_severity_number`, `max_batches`, `timeout_seconds`)
+- optional `verbose_metrics` toggle to include histogram bucket details
 - view streamed NDJSON events as formatted JSON
 
 ## Collector usage

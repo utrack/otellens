@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/utrack/otellens/internal/capture"
+	"github.com/utrack/otellens/internal/model"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
 )
@@ -87,6 +88,40 @@ func TestUIServesHTML(t *testing.T) {
 	}
 	if !strings.Contains(res.Body.String(), "otellens / live capture UI") {
 		t.Fatal("expected UI HTML body")
+	}
+}
+
+func TestRequestToFilterSupportsNotValues(t *testing.T) {
+	f := requestToFilter(StreamRequest{
+		Signals:        []model.SignalType{"metrics", "traces"},
+		MetricNames:    []string{"http.server.request.duration", "!foo", " !bar "},
+		SpanNames:      []string{"GET /", "!POST /"},
+		AttributeNames: []string{"client_name", "!blocked"},
+		MaxBatches:     1,
+	})
+
+	if _, ok := f.MetricNames["http.server.request.duration"]; !ok {
+		t.Fatal("expected metric include value")
+	}
+	if _, ok := f.MetricNamesExclude["foo"]; !ok {
+		t.Fatal("expected metric exclude value foo")
+	}
+	if _, ok := f.MetricNamesExclude["bar"]; !ok {
+		t.Fatal("expected metric exclude value bar")
+	}
+
+	if _, ok := f.SpanNames["GET /"]; !ok {
+		t.Fatal("expected span include value")
+	}
+	if _, ok := f.SpanNamesExclude["POST /"]; !ok {
+		t.Fatal("expected span exclude value")
+	}
+
+	if _, ok := f.AttributeNames["client_name"]; !ok {
+		t.Fatal("expected attribute include value")
+	}
+	if _, ok := f.AttributeExclude["blocked"]; !ok {
+		t.Fatal("expected attribute exclude value")
 	}
 }
 

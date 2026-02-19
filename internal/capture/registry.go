@@ -18,9 +18,10 @@ var ErrSessionLimitReached = errors.New("session limit reached")
 
 // RegisterRequest defines runtime knobs for creating a session.
 type RegisterRequest struct {
-	Filter     Filter
-	MaxBatches int
-	BufferSize int
+	Filter         Filter
+	VerboseMetrics bool
+	MaxBatches     int
+	BufferSize     int
 }
 
 // Registry stores active capture sessions and routes matching telemetry batches.
@@ -44,7 +45,7 @@ func NewRegistry(maxSessions int) *Registry {
 	}
 }
 
-func buildMatchingMetricsPayload(filter Filter, md pmetric.Metrics) (model.MetricsPayload, bool) {
+func buildMatchingMetricsPayload(filter Filter, verboseMetrics bool, md pmetric.Metrics) (model.MetricsPayload, bool) {
 	payload := model.MetricsPayload{Metrics: make([]model.Metric, 0)}
 
 	rms := md.ResourceMetrics()
@@ -61,7 +62,7 @@ func buildMatchingMetricsPayload(filter Filter, md pmetric.Metrics) (model.Metri
 				if !filter.MatchMetric(rm.Resource().Attributes(), sm.Scope().Attributes(), metric) {
 					continue
 				}
-				payload.Metrics = append(payload.Metrics, model.BuildMetric(rm.Resource().Attributes(), sm.Scope(), metric))
+				payload.Metrics = append(payload.Metrics, model.BuildMetric(rm.Resource().Attributes(), sm.Scope(), metric, verboseMetrics))
 				payload.MetricCount++
 				resourceMatched = true
 			}
@@ -98,7 +99,7 @@ func (r *Registry) Register(ctx context.Context, req RegisterRequest) (*Session,
 	}
 
 	sessionID := uuid.NewString()
-	session := newSession(sessionID, req.Filter, req.MaxBatches, req.BufferSize)
+	session := newSession(sessionID, req.Filter, req.VerboseMetrics, req.MaxBatches, req.BufferSize)
 	r.sessions[sessionID] = session
 	r.hasActive.Store(true)
 
@@ -134,7 +135,7 @@ func (r *Registry) PublishMetrics(md pmetric.Metrics) {
 	sessions := r.snapshotSessions()
 
 	for _, session := range sessions {
-		payload, ok := buildMatchingMetricsPayload(session.Filter(), md)
+		payload, ok := buildMatchingMetricsPayload(session.Filter(), session.VerboseMetrics(), md)
 		if !ok {
 			continue
 		}

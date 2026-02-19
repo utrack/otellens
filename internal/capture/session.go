@@ -9,9 +9,10 @@ import (
 
 // Session is a single active API-driven capture stream.
 type Session struct {
-	id         string
-	filter     Filter
-	maxBatches uint64
+	id             string
+	filter         Filter
+	verboseMetrics bool
+	maxBatches     uint64
 
 	events chan model.Envelope
 	done   chan struct{}
@@ -21,16 +22,17 @@ type Session struct {
 	droppedBatches atomic.Uint64
 }
 
-func newSession(id string, filter Filter, maxBatches int, bufferSize int) *Session {
+func newSession(id string, filter Filter, verboseMetrics bool, maxBatches int, bufferSize int) *Session {
 	if bufferSize <= 0 {
 		bufferSize = 32
 	}
 	return &Session{
-		id:         id,
-		filter:     filter,
-		maxBatches: uint64(maxBatches),
-		events:     make(chan model.Envelope, bufferSize),
-		done:       make(chan struct{}),
+		id:             id,
+		filter:         filter,
+		verboseMetrics: verboseMetrics,
+		maxBatches:     uint64(maxBatches),
+		events:         make(chan model.Envelope, bufferSize),
+		done:           make(chan struct{}),
 	}
 }
 
@@ -39,6 +41,9 @@ func (s *Session) ID() string { return s.id }
 
 // Filter returns session filter definition.
 func (s *Session) Filter() Filter { return s.filter }
+
+// VerboseMetrics returns whether verbose metric datapoints are enabled for this session.
+func (s *Session) VerboseMetrics() bool { return s.verboseMetrics }
 
 // Events returns a read-only stream of capture envelopes.
 func (s *Session) Events() <-chan model.Envelope { return s.events }
