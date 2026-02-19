@@ -15,7 +15,7 @@ FROM gcr.io/distroless/base-debian12
 COPY --from=builder /src/_build/otelcol /otelcol
 COPY build/otelcol-config.yaml /etc/otelcol/config.yaml
 
-EXPOSE 4317 4318 18080
+EXPOSE 4317 4318 9411 13133 18080
 
 ENTRYPOINT ["/otelcol"]
 CMD ["--config=/etc/otelcol/config.yaml"]

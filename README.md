@@ -98,8 +98,16 @@ docker build -t otellens-otelcol:latest .
 Run image:
 
 ```bash
-docker run --rm -p 4317:4317 -p 4318:4318 -p 18080:18080 otellens-otelcol:latest
+docker run --rm -p 4317:4317 -p 4318:4318 -p 9411:9411 -p 13133:13133 -p 18080:18080 otellens-otelcol:latest
 ```
+
+Included receivers in the default config:
+
+- OTLP gRPC: `4317`
+- OTLP HTTP: `4318`
+- Zipkin: `9411`
+- Prometheus scrape receiver (collector self-scrape): `localhost:8888`
+- Health check extension: `13133`
 
 Open capture stream:
 

@@ -5,8 +5,21 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
+  zipkin:
+    endpoint: 0.0.0.0:9411
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "otelcol"
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["localhost:8888"]
 
 processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
   batch: {}
 
 exporters:
@@ -19,20 +32,20 @@ exporters:
     session_buffer_size: 64
 
 extensions:
-  #health_check: {}
+  health_check: {}
 
 service:
-  #extensions: [health_check]
+  extensions: [health_check]
   pipelines:
     traces:
-      receivers: [otlp]
-      processors: [batch]
+      receivers: [otlp, zipkin]
+      processors: [memory_limiter, batch]
       exporters: [debug, otellens]
     metrics:
-      receivers: [otlp]
-      processors: [batch]
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch]
       exporters: [debug, otellens]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [memory_limiter, batch]
       exporters: [debug, otellens]
