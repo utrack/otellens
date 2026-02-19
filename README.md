@@ -56,6 +56,14 @@ Each line is either:
 - a telemetry `Envelope`, or
 - a terminal `StreamEnd` event.
 
+### `GET /ui`
+
+Built-in web UI for interactive live capture:
+
+- start/stop streaming sessions
+- configure all request filters (`signals`, `metric_names`, `span_names`, `attribute_names`, `resource_attributes`, `log_body_contains`, `min_severity_number`, `max_batches`, `timeout_seconds`)
+- view streamed NDJSON events as formatted JSON
+
 ## Collector usage
 
 This module exposes `otellens.NewFactory()` so it can be wired into a custom Collector distribution.

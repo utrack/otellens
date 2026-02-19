@@ -15,28 +15,13 @@ func BuildMetricsPayload(md pmetric.Metrics) MetricsPayload {
 
 	rms := md.ResourceMetrics()
 	for i := 0; i < rms.Len(); i++ {
-		resourceAttrs := mapFromAttrs(rms.At(i).Resource().Attributes())
 		sms := rms.At(i).ScopeMetrics()
 		for j := 0; j < sms.Len(); j++ {
 			scope := sms.At(j).Scope()
-			scopeOut := Scope{
-				Name:       scope.Name(),
-				Version:    scope.Version(),
-				Attributes: mapFromAttrs(scope.Attributes()),
-			}
 
 			metrics := sms.At(j).Metrics()
 			for k := 0; k < metrics.Len(); k++ {
-				metric := metrics.At(k)
-				metricsOut = append(metricsOut, Metric{
-					Name:               metric.Name(),
-					Description:        metric.Description(),
-					Unit:               metric.Unit(),
-					Type:               metric.Type().String(),
-					ResourceAttributes: resourceAttrs,
-					Scope:              scopeOut,
-					DataPoints:         buildMetricDataPoints(metric),
-				})
+				metricsOut = append(metricsOut, BuildMetric(rms.At(i).Resource().Attributes(), scope, metrics.At(k)))
 			}
 		}
 	}
@@ -45,6 +30,23 @@ func BuildMetricsPayload(md pmetric.Metrics) MetricsPayload {
 		ResourceMetrics: rms.Len(),
 		MetricCount:     md.MetricCount(),
 		Metrics:         metricsOut,
+	}
+}
+
+// BuildMetric creates a detailed projection for one metric candidate with its resource/scope context.
+func BuildMetric(resourceAttrs pcommon.Map, scope pcommon.InstrumentationScope, metric pmetric.Metric) Metric {
+	return Metric{
+		Name:               metric.Name(),
+		Description:        metric.Description(),
+		Unit:               metric.Unit(),
+		Type:               metric.Type().String(),
+		ResourceAttributes: mapFromAttrs(resourceAttrs),
+		Scope: Scope{
+			Name:       scope.Name(),
+			Version:    scope.Version(),
+			Attributes: mapFromAttrs(scope.Attributes()),
+		},
+		DataPoints: buildMetricDataPoints(metric),
 	}
 }
 

@@ -44,6 +44,41 @@ func NewRegistry(maxSessions int) *Registry {
 	}
 }
 
+func buildMatchingMetricsPayload(filter Filter, md pmetric.Metrics) (model.MetricsPayload, bool) {
+	payload := model.MetricsPayload{Metrics: make([]model.Metric, 0)}
+
+	rms := md.ResourceMetrics()
+	for i := 0; i < rms.Len(); i++ {
+		rm := rms.At(i)
+		resourceMatched := false
+
+		sms := rm.ScopeMetrics()
+		for j := 0; j < sms.Len(); j++ {
+			sm := sms.At(j)
+			metrics := sm.Metrics()
+			for k := 0; k < metrics.Len(); k++ {
+				metric := metrics.At(k)
+				if !filter.MatchMetric(rm.Resource().Attributes(), sm.Scope().Attributes(), metric) {
+					continue
+				}
+				payload.Metrics = append(payload.Metrics, model.BuildMetric(rm.Resource().Attributes(), sm.Scope(), metric))
+				payload.MetricCount++
+				resourceMatched = true
+			}
+		}
+
+		if resourceMatched {
+			payload.ResourceMetrics++
+		}
+	}
+
+	if payload.MetricCount == 0 {
+		return model.MetricsPayload{}, false
+	}
+
+	return payload, true
+}
+
 // HasActiveSessions returns true if at least one filter is currently registered.
 func (r *Registry) HasActiveSessions() bool {
 	return r.hasActive.Load()
@@ -97,23 +132,20 @@ func (r *Registry) PublishMetrics(md pmetric.Metrics) {
 	}
 
 	sessions := r.snapshotSessions()
-	var payload *model.MetricsPayload
 
 	for _, session := range sessions {
-		if !session.Filter().MatchMetrics(md) {
+		payload, ok := buildMatchingMetricsPayload(session.Filter(), md)
+		if !ok {
 			continue
 		}
-		if payload == nil {
-			built := model.BuildMetricsPayload(md)
-			payload = &built
-		}
+		built := payload
 
 		envelope := model.Envelope{
 			SessionID:  session.ID(),
 			Signal:     model.SignalMetrics,
 			BatchIndex: session.SentBatches() + 1,
 			CapturedAt: time.Now().UTC(),
-			Payload:    payload,
+			Payload:    &built,
 		}
 
 		_, completed := session.Emit(envelope)

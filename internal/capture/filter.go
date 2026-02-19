@@ -21,42 +21,44 @@ type Filter struct {
 	ResourceAttributes map[string]string
 }
 
-// MatchMetrics checks whether a metrics batch matches this filter.
+// MatchMetrics checks whether at least one metric in a batch matches this filter.
 func (f Filter) MatchMetrics(md pmetric.Metrics) bool {
-	if !f.acceptsSignal(model.SignalMetrics) {
-		return false
-	}
-
 	rms := md.ResourceMetrics()
 	for i := 0; i < rms.Len(); i++ {
 		rm := rms.At(i)
-		if !f.matchResourceAttrs(rm.Resource().Attributes()) {
-			continue
-		}
-
-		attrsMatch := f.matchMetricAttributeNames(rm)
-
-		if len(f.MetricNames) == 0 {
-			if attrsMatch {
-				return true
-			}
-			continue
-		}
-
 		sms := rm.ScopeMetrics()
 		for j := 0; j < sms.Len(); j++ {
-			metrics := sms.At(j).Metrics()
+			sm := sms.At(j)
+			metrics := sm.Metrics()
 			for k := 0; k < metrics.Len(); k++ {
-				if _, ok := f.MetricNames[metrics.At(k).Name()]; ok {
-					if attrsMatch {
-						return true
-					}
+				if f.MatchMetric(rm.Resource().Attributes(), sm.Scope().Attributes(), metrics.At(k)) {
+					return true
 				}
 			}
 		}
 	}
 
 	return false
+}
+
+// MatchMetric checks whether one metric candidate with resource/scope context matches this filter.
+func (f Filter) MatchMetric(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, metric pmetric.Metric) bool {
+	if !f.acceptsSignal(model.SignalMetrics) {
+		return false
+	}
+	if !f.matchResourceAttrs(resourceAttrs) {
+		return false
+	}
+	if len(f.MetricNames) > 0 {
+		if _, ok := f.MetricNames[metric.Name()]; !ok {
+			return false
+		}
+	}
+	if !f.matchMetricAttributeNames(resourceAttrs, scopeAttrs, metric) {
+		return false
+	}
+
+	return true
 }
 
 // MatchTraces checks whether a traces batch matches this filter.
@@ -72,24 +74,21 @@ func (f Filter) MatchTraces(td ptrace.Traces) bool {
 			continue
 		}
 
-		attrsMatch := f.matchTraceAttributeNames(rs)
-
-		if len(f.SpanNames) == 0 {
-			if attrsMatch {
-				return true
-			}
-			continue
-		}
-
 		ilss := rs.ScopeSpans()
 		for j := 0; j < ilss.Len(); j++ {
-			spans := ilss.At(j).Spans()
+			ss := ilss.At(j)
+			spans := ss.Spans()
 			for k := 0; k < spans.Len(); k++ {
-				if _, ok := f.SpanNames[spans.At(k).Name()]; ok {
-					if attrsMatch {
-						return true
+				span := spans.At(k)
+				if len(f.SpanNames) > 0 {
+					if _, ok := f.SpanNames[span.Name()]; !ok {
+						continue
 					}
 				}
+				if !f.matchTraceAttributeNames(rs.Resource().Attributes(), ss.Scope().Attributes(), span) {
+					continue
+				}
+				return true
 			}
 		}
 	}
@@ -110,16 +109,15 @@ func (f Filter) MatchLogs(ld plog.Logs) bool {
 			continue
 		}
 
-		attrsMatch := f.matchLogAttributeNames(rl)
-		if !attrsMatch {
-			continue
-		}
-
 		sls := rl.ScopeLogs()
 		for j := 0; j < sls.Len(); j++ {
-			logs := sls.At(j).LogRecords()
+			sl := sls.At(j)
+			logs := sl.LogRecords()
 			for k := 0; k < logs.Len(); k++ {
 				record := logs.At(k)
+				if !f.matchLogAttributeNames(rl.Resource().Attributes(), sl.Scope().Attributes(), record.Attributes()) {
+					continue
+				}
 				if f.MinSeverityNumber > 0 && record.SeverityNumber() < f.MinSeverityNumber {
 					continue
 				}
@@ -155,29 +153,17 @@ func (f Filter) matchResourceAttrs(attrs pcommon.Map) bool {
 	return true
 }
 
-func (f Filter) matchMetricAttributeNames(rm pmetric.ResourceMetrics) bool {
+func (f Filter) matchMetricAttributeNames(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, metric pmetric.Metric) bool {
 	if len(f.AttributeNames) == 0 {
 		return true
 	}
-	if f.containsAnyKey(rm.Resource().Attributes()) {
+	if f.containsAnyKey(resourceAttrs) {
 		return true
 	}
-
-	sms := rm.ScopeMetrics()
-	for i := 0; i < sms.Len(); i++ {
-		sm := sms.At(i)
-		if f.containsAnyKey(sm.Scope().Attributes()) {
-			return true
-		}
-		metrics := sm.Metrics()
-		for j := 0; j < metrics.Len(); j++ {
-			if f.metricDataPointsContainAnyKey(metrics.At(j)) {
-				return true
-			}
-		}
+	if f.containsAnyKey(scopeAttrs) {
+		return true
 	}
-
-	return false
+	return f.metricDataPointsContainAnyKey(metric)
 }
 
 func (f Filter) metricDataPointsContainAnyKey(metric pmetric.Metric) bool {
@@ -222,61 +208,40 @@ func (f Filter) metricDataPointsContainAnyKey(metric pmetric.Metric) bool {
 	return false
 }
 
-func (f Filter) matchTraceAttributeNames(rs ptrace.ResourceSpans) bool {
+func (f Filter) matchTraceAttributeNames(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, span ptrace.Span) bool {
 	if len(f.AttributeNames) == 0 {
 		return true
 	}
-	if f.containsAnyKey(rs.Resource().Attributes()) {
+	if f.containsAnyKey(resourceAttrs) {
 		return true
 	}
-
-	ilss := rs.ScopeSpans()
-	for i := 0; i < ilss.Len(); i++ {
-		ss := ilss.At(i)
-		if f.containsAnyKey(ss.Scope().Attributes()) {
+	if f.containsAnyKey(scopeAttrs) {
+		return true
+	}
+	if f.containsAnyKey(span.Attributes()) {
+		return true
+	}
+	events := span.Events()
+	for i := 0; i < events.Len(); i++ {
+		if f.containsAnyKey(events.At(i).Attributes()) {
 			return true
-		}
-		spans := ss.Spans()
-		for j := 0; j < spans.Len(); j++ {
-			span := spans.At(j)
-			if f.containsAnyKey(span.Attributes()) {
-				return true
-			}
-			events := span.Events()
-			for k := 0; k < events.Len(); k++ {
-				if f.containsAnyKey(events.At(k).Attributes()) {
-					return true
-				}
-			}
 		}
 	}
 
 	return false
 }
 
-func (f Filter) matchLogAttributeNames(rl plog.ResourceLogs) bool {
+func (f Filter) matchLogAttributeNames(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, logAttrs pcommon.Map) bool {
 	if len(f.AttributeNames) == 0 {
 		return true
 	}
-	if f.containsAnyKey(rl.Resource().Attributes()) {
+	if f.containsAnyKey(resourceAttrs) {
 		return true
 	}
-
-	sls := rl.ScopeLogs()
-	for i := 0; i < sls.Len(); i++ {
-		sl := sls.At(i)
-		if f.containsAnyKey(sl.Scope().Attributes()) {
-			return true
-		}
-		logs := sl.LogRecords()
-		for j := 0; j < logs.Len(); j++ {
-			if f.containsAnyKey(logs.At(j).Attributes()) {
-				return true
-			}
-		}
+	if f.containsAnyKey(scopeAttrs) {
+		return true
 	}
-
-	return false
+	return f.containsAnyKey(logAttrs)
 }
 
 func (f Filter) containsAnyKey(attrs pcommon.Map) bool {

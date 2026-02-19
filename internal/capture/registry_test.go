@@ -82,6 +82,71 @@ func TestRegistryFastDropPath(t *testing.T) {
 	}
 }
 
+func TestRegistryPublishMetrics_EmitsOnlyMatchingMetrics(t *testing.T) {
+	registry := NewRegistry(10)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	session, err := registry.Register(ctx, RegisterRequest{
+		Filter: Filter{
+			Signals:        map[model.SignalType]struct{}{model.SignalMetrics: {}},
+			MetricNames:    map[string]struct{}{"http.server.request.duration": {}},
+			AttributeNames: map[string]struct{}{"client_name": {}},
+		},
+		MaxBatches: 1,
+		BufferSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	sm := rm.ScopeMetrics().AppendEmpty()
+
+	nonTarget := sm.Metrics().AppendEmpty()
+	nonTarget.SetName("hnb_product_api_graphql_total")
+	nonTargetDP := nonTarget.SetEmptySum().DataPoints().AppendEmpty()
+	nonTargetDP.Attributes().PutStr("client_name", "web")
+	nonTargetDP.SetIntValue(1)
+
+	target := sm.Metrics().AppendEmpty()
+	target.SetName("http.server.request.duration")
+	targetDP := target.SetEmptyGauge().DataPoints().AppendEmpty()
+	targetDP.Attributes().PutStr("other", "x")
+	targetDP.SetDoubleValue(1)
+
+	registry.PublishMetrics(md)
+
+	select {
+	case <-session.Events():
+		t.Fatal("unexpected event: non-matching metric batch must not be emitted")
+	default:
+	}
+
+	targetDP.Attributes().PutStr("client_name", "mobile")
+	registry.PublishMetrics(md)
+
+	select {
+	case event := <-session.Events():
+		payload, ok := event.Payload.(*model.MetricsPayload)
+		if !ok {
+			t.Fatalf("unexpected payload type: %T", event.Payload)
+		}
+		if payload.MetricCount != 1 {
+			t.Fatalf("expected 1 matching metric, got %d", payload.MetricCount)
+		}
+		if len(payload.Metrics) != 1 {
+			t.Fatalf("expected one metric in payload, got %d", len(payload.Metrics))
+		}
+		if payload.Metrics[0].Name != "http.server.request.duration" {
+			t.Fatalf("unexpected metric in payload: %s", payload.Metrics[0].Name)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected emitted event for matching metric")
+	}
+}
+
 func newMetricsBatch(name string) pmetric.Metrics {
 	md := pmetric.NewMetrics()
 	rm := md.ResourceMetrics().AppendEmpty()
