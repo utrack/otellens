@@ -37,10 +37,17 @@ Request example:
 {
   "signals": ["metrics"],
   "metric_names": ["A"],
+  "attribute_names": ["service.name", "http.route"],
   "max_batches": 15,
   "timeout_seconds": 30
 }
 ```
+
+`attribute_names` matches on OTEL attribute keys found in parsed attribute maps across signal structures:
+
+- metrics: resource/scope/datapoint attributes
+- traces: resource/scope/span/span-event attributes
+- logs: resource/scope/log-record attributes
 
 Response type: `application/x-ndjson`
 

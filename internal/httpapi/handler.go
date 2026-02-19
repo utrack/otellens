@@ -146,10 +146,16 @@ func requestToFilter(req StreamRequest) capture.Filter {
 		spanNames[spanName] = struct{}{}
 	}
 
+	attributeNames := make(map[string]struct{}, len(req.AttributeNames))
+	for _, attributeName := range req.AttributeNames {
+		attributeNames[attributeName] = struct{}{}
+	}
+
 	return capture.Filter{
 		Signals:            signals,
 		MetricNames:        metricNames,
 		SpanNames:          spanNames,
+		AttributeNames:     attributeNames,
 		LogBodyContains:    req.LogBodyContains,
 		MinSeverityNumber:  plog.SeverityNumber(req.MinSeverityNumber),
 		ResourceAttributes: req.ResourceAttributes,

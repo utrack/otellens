@@ -15,6 +15,7 @@ type Filter struct {
 	Signals            map[model.SignalType]struct{}
 	MetricNames        map[string]struct{}
 	SpanNames          map[string]struct{}
+	AttributeNames     map[string]struct{}
 	LogBodyContains    string
 	MinSeverityNumber  plog.SeverityNumber
 	ResourceAttributes map[string]string
@@ -33,8 +34,13 @@ func (f Filter) MatchMetrics(md pmetric.Metrics) bool {
 			continue
 		}
 
+		attrsMatch := f.matchMetricAttributeNames(rm)
+
 		if len(f.MetricNames) == 0 {
-			return true
+			if attrsMatch {
+				return true
+			}
+			continue
 		}
 
 		sms := rm.ScopeMetrics()
@@ -42,7 +48,9 @@ func (f Filter) MatchMetrics(md pmetric.Metrics) bool {
 			metrics := sms.At(j).Metrics()
 			for k := 0; k < metrics.Len(); k++ {
 				if _, ok := f.MetricNames[metrics.At(k).Name()]; ok {
-					return true
+					if attrsMatch {
+						return true
+					}
 				}
 			}
 		}
@@ -64,8 +72,13 @@ func (f Filter) MatchTraces(td ptrace.Traces) bool {
 			continue
 		}
 
+		attrsMatch := f.matchTraceAttributeNames(rs)
+
 		if len(f.SpanNames) == 0 {
-			return true
+			if attrsMatch {
+				return true
+			}
+			continue
 		}
 
 		ilss := rs.ScopeSpans()
@@ -73,7 +86,9 @@ func (f Filter) MatchTraces(td ptrace.Traces) bool {
 			spans := ilss.At(j).Spans()
 			for k := 0; k < spans.Len(); k++ {
 				if _, ok := f.SpanNames[spans.At(k).Name()]; ok {
-					return true
+					if attrsMatch {
+						return true
+					}
 				}
 			}
 		}
@@ -92,6 +107,11 @@ func (f Filter) MatchLogs(ld plog.Logs) bool {
 	for i := 0; i < rls.Len(); i++ {
 		rl := rls.At(i)
 		if !f.matchResourceAttrs(rl.Resource().Attributes()) {
+			continue
+		}
+
+		attrsMatch := f.matchLogAttributeNames(rl)
+		if !attrsMatch {
 			continue
 		}
 
@@ -133,4 +153,140 @@ func (f Filter) matchResourceAttrs(attrs pcommon.Map) bool {
 		}
 	}
 	return true
+}
+
+func (f Filter) matchMetricAttributeNames(rm pmetric.ResourceMetrics) bool {
+	if len(f.AttributeNames) == 0 {
+		return true
+	}
+	if f.containsAnyKey(rm.Resource().Attributes()) {
+		return true
+	}
+
+	sms := rm.ScopeMetrics()
+	for i := 0; i < sms.Len(); i++ {
+		sm := sms.At(i)
+		if f.containsAnyKey(sm.Scope().Attributes()) {
+			return true
+		}
+		metrics := sm.Metrics()
+		for j := 0; j < metrics.Len(); j++ {
+			if f.metricDataPointsContainAnyKey(metrics.At(j)) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (f Filter) metricDataPointsContainAnyKey(metric pmetric.Metric) bool {
+	switch metric.Type() {
+	case pmetric.MetricTypeGauge:
+		dps := metric.Gauge().DataPoints()
+		for i := 0; i < dps.Len(); i++ {
+			if f.containsAnyKey(dps.At(i).Attributes()) {
+				return true
+			}
+		}
+	case pmetric.MetricTypeSum:
+		dps := metric.Sum().DataPoints()
+		for i := 0; i < dps.Len(); i++ {
+			if f.containsAnyKey(dps.At(i).Attributes()) {
+				return true
+			}
+		}
+	case pmetric.MetricTypeHistogram:
+		dps := metric.Histogram().DataPoints()
+		for i := 0; i < dps.Len(); i++ {
+			if f.containsAnyKey(dps.At(i).Attributes()) {
+				return true
+			}
+		}
+	case pmetric.MetricTypeSummary:
+		dps := metric.Summary().DataPoints()
+		for i := 0; i < dps.Len(); i++ {
+			if f.containsAnyKey(dps.At(i).Attributes()) {
+				return true
+			}
+		}
+	case pmetric.MetricTypeExponentialHistogram:
+		dps := metric.ExponentialHistogram().DataPoints()
+		for i := 0; i < dps.Len(); i++ {
+			if f.containsAnyKey(dps.At(i).Attributes()) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (f Filter) matchTraceAttributeNames(rs ptrace.ResourceSpans) bool {
+	if len(f.AttributeNames) == 0 {
+		return true
+	}
+	if f.containsAnyKey(rs.Resource().Attributes()) {
+		return true
+	}
+
+	ilss := rs.ScopeSpans()
+	for i := 0; i < ilss.Len(); i++ {
+		ss := ilss.At(i)
+		if f.containsAnyKey(ss.Scope().Attributes()) {
+			return true
+		}
+		spans := ss.Spans()
+		for j := 0; j < spans.Len(); j++ {
+			span := spans.At(j)
+			if f.containsAnyKey(span.Attributes()) {
+				return true
+			}
+			events := span.Events()
+			for k := 0; k < events.Len(); k++ {
+				if f.containsAnyKey(events.At(k).Attributes()) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (f Filter) matchLogAttributeNames(rl plog.ResourceLogs) bool {
+	if len(f.AttributeNames) == 0 {
+		return true
+	}
+	if f.containsAnyKey(rl.Resource().Attributes()) {
+		return true
+	}
+
+	sls := rl.ScopeLogs()
+	for i := 0; i < sls.Len(); i++ {
+		sl := sls.At(i)
+		if f.containsAnyKey(sl.Scope().Attributes()) {
+			return true
+		}
+		logs := sl.LogRecords()
+		for j := 0; j < logs.Len(); j++ {
+			if f.containsAnyKey(logs.At(j).Attributes()) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (f Filter) containsAnyKey(attrs pcommon.Map) bool {
+	if len(f.AttributeNames) == 0 {
+		return true
+	}
+	for key := range f.AttributeNames {
+		if _, ok := attrs.Get(key); ok {
+			return true
+		}
+	}
+	return false
 }

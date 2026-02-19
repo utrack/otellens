@@ -7,6 +7,7 @@ type StreamRequest struct {
 	Signals            []model.SignalType `json:"signals"`
 	MetricNames        []string           `json:"metric_names"`
 	SpanNames          []string           `json:"span_names"`
+	AttributeNames     []string           `json:"attribute_names"`
 	LogBodyContains    string             `json:"log_body_contains"`
 	MinSeverityNumber  int32              `json:"min_severity_number"`
 	ResourceAttributes map[string]string  `json:"resource_attributes"`
