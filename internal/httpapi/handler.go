@@ -27,6 +27,8 @@ func NewHandler(registry *capture.Registry, logger *zap.Logger) *Handler {
 
 // RegisterRoutes registers HTTP routes for the API server.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/", h.handleRoot)
+	mux.HandleFunc("/ui", h.handleUI)
 	mux.HandleFunc("/v1/capture/stream", h.handleStream)
 	mux.HandleFunc("/healthz", h.handleHealth)
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +50,43 @@ func TestHealthz(t *testing.T) {
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", res.Code)
+	}
+}
+
+func TestRootRedirectsToUI(t *testing.T) {
+	h := NewHandler(capture.NewRegistry(4), zap.NewNop())
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+
+	if res.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected 307, got %d", res.Code)
+	}
+	if got := res.Header().Get("Location"); got != "/ui" {
+		t.Fatalf("expected redirect to /ui, got %q", got)
+	}
+}
+
+func TestUIServesHTML(t *testing.T) {
+	h := NewHandler(capture.NewRegistry(4), zap.NewNop())
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui", nil)
+	res := httptest.NewRecorder()
+	mux.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.Code)
+	}
+	if got := res.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("expected HTML content type, got %q", got)
+	}
+	if !strings.Contains(res.Body.String(), "otellens / live capture UI") {
+		t.Fatal("expected UI HTML body")
 	}
 }
 
