@@ -1,0 +1,38 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  debug:
+    verbosity: detailed
+  otellens:
+    http_addr: ":18080"
+    max_concurrent_sessions: 256
+    default_session_timeout: 30s
+    session_buffer_size: 64
+
+extensions:
+  #health_check: {}
+
+service:
+  #extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otellens]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otellens]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, otellens]

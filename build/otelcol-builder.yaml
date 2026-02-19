@@ -1,0 +1,18 @@
+dist:
+  module: github.com/utrack/otellens/otelcol
+  name: otelcol
+  description: Custom OpenTelemetry Collector with otellens exporter
+  output_path: ./_build
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.146.1
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.146.1
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.146.1
+  - gomod: github.com/utrack/otellens v0.0.0
+
+replaces:
+  - github.com/utrack/otellens => /src
