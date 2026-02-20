@@ -92,12 +92,17 @@ func TestUIServesHTML(t *testing.T) {
 }
 
 func TestRequestToFilterSupportsNotValues(t *testing.T) {
+	bucketCountsCount := 28
+	explicitBoundsCount := 29
+
 	f := requestToFilter(StreamRequest{
-		Signals:        []model.SignalType{"metrics", "traces"},
-		MetricNames:    []string{"http.server.request.duration", "!foo", " !bar "},
-		SpanNames:      []string{"GET /", "!POST /"},
-		AttributeNames: []string{"client_name", "!blocked"},
-		MaxBatches:     1,
+		Signals:             []model.SignalType{"metrics", "traces"},
+		MetricNames:         []string{"http.server.request.duration", "!foo", " !bar "},
+		SpanNames:           []string{"GET /", "!POST /"},
+		AttributeNames:      []string{"client_name", "!blocked"},
+		BucketCountsCount:   &bucketCountsCount,
+		ExplicitBoundsCount: &explicitBoundsCount,
+		MaxBatches:          1,
 	})
 
 	if _, ok := f.MetricNames["http.server.request.duration"]; !ok {
@@ -122,6 +127,22 @@ func TestRequestToFilterSupportsNotValues(t *testing.T) {
 	}
 	if _, ok := f.AttributeExclude["blocked"]; !ok {
 		t.Fatal("expected attribute exclude value")
+	}
+	if f.BucketCountsCount == nil || *f.BucketCountsCount != bucketCountsCount {
+		t.Fatalf("expected bucket_counts_count=%d", bucketCountsCount)
+	}
+	if f.ExplicitBoundsCount == nil || *f.ExplicitBoundsCount != explicitBoundsCount {
+		t.Fatalf("expected explicit_bounds_count=%d", explicitBoundsCount)
+	}
+}
+
+func TestValidateRequestRejectsNegativeHistogramCountFilters(t *testing.T) {
+	negOne := -1
+	if err := validateRequest(StreamRequest{MaxBatches: 1, BucketCountsCount: &negOne}); err == nil {
+		t.Fatal("expected validation error for negative bucket_counts_count")
+	}
+	if err := validateRequest(StreamRequest{MaxBatches: 1, ExplicitBoundsCount: &negOne}); err == nil {
+		t.Fatal("expected validation error for negative explicit_bounds_count")
 	}
 }
 

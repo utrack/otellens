@@ -131,6 +131,12 @@ func validateRequest(req StreamRequest) error {
 	if req.TimeoutSeconds < 0 {
 		return errors.New("timeout_seconds must be >= 0")
 	}
+	if req.BucketCountsCount != nil && *req.BucketCountsCount < 0 {
+		return errors.New("bucket_counts_count must be >= 0")
+	}
+	if req.ExplicitBoundsCount != nil && *req.ExplicitBoundsCount < 0 {
+		return errors.New("explicit_bounds_count must be >= 0")
+	}
 	return nil
 }
 
@@ -145,16 +151,18 @@ func requestToFilter(req StreamRequest) capture.Filter {
 	attributeNames, attributeExclude := parseExactFilterValues(req.AttributeNames)
 
 	return capture.Filter{
-		Signals:            signals,
-		MetricNames:        metricNames,
-		MetricNamesExclude: metricNamesExclude,
-		SpanNames:          spanNames,
-		SpanNamesExclude:   spanNamesExclude,
-		AttributeNames:     attributeNames,
-		AttributeExclude:   attributeExclude,
-		LogBodyContains:    req.LogBodyContains,
-		MinSeverityNumber:  plog.SeverityNumber(req.MinSeverityNumber),
-		ResourceAttributes: req.ResourceAttributes,
+		Signals:             signals,
+		MetricNames:         metricNames,
+		MetricNamesExclude:  metricNamesExclude,
+		SpanNames:           spanNames,
+		SpanNamesExclude:    spanNamesExclude,
+		AttributeNames:      attributeNames,
+		AttributeExclude:    attributeExclude,
+		BucketCountsCount:   req.BucketCountsCount,
+		ExplicitBoundsCount: req.ExplicitBoundsCount,
+		LogBodyContains:     req.LogBodyContains,
+		MinSeverityNumber:   plog.SeverityNumber(req.MinSeverityNumber),
+		ResourceAttributes:  req.ResourceAttributes,
 	}
 }
 

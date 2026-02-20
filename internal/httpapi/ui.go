@@ -151,6 +151,16 @@ const uiPage = `<!doctype html>
           </div>
 
           <div class="row">
+            <label for="bucket_counts_count">bucket_counts_count (histogram datapoint bucket_counts length)</label>
+            <input id="bucket_counts_count" type="number" min="0" placeholder="28" />
+          </div>
+
+          <div class="row">
+            <label for="explicit_bounds_count">explicit_bounds_count (histogram datapoint explicit_bounds length)</label>
+            <input id="explicit_bounds_count" type="number" min="0" placeholder="29" />
+          </div>
+
+          <div class="row">
             <label for="max_batches">max_batches</label>
             <input id="max_batches" type="number" min="1" value="15" required />
           </div>
@@ -229,6 +239,14 @@ const uiPage = `<!doctype html>
     function setRunning(running) {
       startBtn.disabled = running;
       stopBtn.disabled = !running;
+    }
+
+    function parseOptionalInt(id) {
+      const raw = document.getElementById(id).value.trim();
+      if (!raw) return null;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) return null;
+      return Math.trunc(n);
     }
 
     async function streamCapture(payload) {
@@ -310,6 +328,8 @@ const uiPage = `<!doctype html>
         resource_attributes: parseResourceAttributes(document.getElementById('resource_attributes').value),
         log_body_contains: document.getElementById('log_body_contains').value.trim(),
         min_severity_number: Number(document.getElementById('min_severity_number').value || 0),
+        bucket_counts_count: parseOptionalInt('bucket_counts_count'),
+        explicit_bounds_count: parseOptionalInt('explicit_bounds_count'),
         verbose_metrics: document.getElementById('verbose_metrics').checked,
         max_batches: Number(document.getElementById('max_batches').value || 15),
         timeout_seconds: Number(document.getElementById('timeout_seconds').value || 30),

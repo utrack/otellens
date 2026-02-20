@@ -12,16 +12,18 @@ import (
 
 // Filter defines matching conditions for live capture sessions.
 type Filter struct {
-	Signals            map[model.SignalType]struct{}
-	MetricNames        map[string]struct{}
-	MetricNamesExclude map[string]struct{}
-	SpanNames          map[string]struct{}
-	SpanNamesExclude   map[string]struct{}
-	AttributeNames     map[string]struct{}
-	AttributeExclude   map[string]struct{}
-	LogBodyContains    string
-	MinSeverityNumber  plog.SeverityNumber
-	ResourceAttributes map[string]string
+	Signals             map[model.SignalType]struct{}
+	MetricNames         map[string]struct{}
+	MetricNamesExclude  map[string]struct{}
+	SpanNames           map[string]struct{}
+	SpanNamesExclude    map[string]struct{}
+	AttributeNames      map[string]struct{}
+	AttributeExclude    map[string]struct{}
+	BucketCountsCount   *int
+	ExplicitBoundsCount *int
+	LogBodyContains     string
+	MinSeverityNumber   plog.SeverityNumber
+	ResourceAttributes  map[string]string
 }
 
 // MatchMetrics checks whether at least one metric in a batch matches this filter.
@@ -63,8 +65,34 @@ func (f Filter) MatchMetric(resourceAttrs pcommon.Map, scopeAttrs pcommon.Map, m
 	if !f.matchMetricAttributeNames(resourceAttrs, scopeAttrs, metric) {
 		return false
 	}
+	if !f.matchMetricDataPointCounts(metric) {
+		return false
+	}
 
 	return true
+}
+
+func (f Filter) matchMetricDataPointCounts(metric pmetric.Metric) bool {
+	if f.BucketCountsCount == nil && f.ExplicitBoundsCount == nil {
+		return true
+	}
+	if metric.Type() != pmetric.MetricTypeHistogram {
+		return false
+	}
+
+	dps := metric.Histogram().DataPoints()
+	for i := 0; i < dps.Len(); i++ {
+		dp := dps.At(i)
+		if f.BucketCountsCount != nil && dp.BucketCounts().Len() != *f.BucketCountsCount {
+			continue
+		}
+		if f.ExplicitBoundsCount != nil && dp.ExplicitBounds().Len() != *f.ExplicitBoundsCount {
+			continue
+		}
+		return true
+	}
+
+	return false
 }
 
 // MatchTraces checks whether a traces batch matches this filter.

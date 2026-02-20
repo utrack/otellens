@@ -4,16 +4,18 @@ import "github.com/utrack/otellens/internal/model"
 
 // StreamRequest defines filters for one on-demand capture session.
 type StreamRequest struct {
-	Signals            []model.SignalType `json:"signals"`
-	MetricNames        []string           `json:"metric_names"`
-	SpanNames          []string           `json:"span_names"`
-	AttributeNames     []string           `json:"attribute_names"`
-	LogBodyContains    string             `json:"log_body_contains"`
-	MinSeverityNumber  int32              `json:"min_severity_number"`
-	ResourceAttributes map[string]string  `json:"resource_attributes"`
-	VerboseMetrics     bool               `json:"verbose_metrics"`
-	MaxBatches         int                `json:"max_batches"`
-	TimeoutSeconds     int                `json:"timeout_seconds"`
+	Signals             []model.SignalType `json:"signals"`
+	MetricNames         []string           `json:"metric_names"`
+	SpanNames           []string           `json:"span_names"`
+	AttributeNames      []string           `json:"attribute_names"`
+	LogBodyContains     string             `json:"log_body_contains"`
+	MinSeverityNumber   int32              `json:"min_severity_number"`
+	ResourceAttributes  map[string]string  `json:"resource_attributes"`
+	BucketCountsCount   *int               `json:"bucket_counts_count"`
+	ExplicitBoundsCount *int               `json:"explicit_bounds_count"`
+	VerboseMetrics      bool               `json:"verbose_metrics"`
+	MaxBatches          int                `json:"max_batches"`
+	TimeoutSeconds      int                `json:"timeout_seconds"`
 }
 
 // StreamError is serialized for API-level failures.

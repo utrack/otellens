@@ -137,6 +137,69 @@ func TestFilterMatchMetrics_NotAttributeNames(t *testing.T) {
 	}
 }
 
+func TestFilterMatchMetrics_HistogramDataPointCountFilters(t *testing.T) {
+	bucketCount := 3
+	explicitBoundsCount := 2
+
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	sm := rm.ScopeMetrics().AppendEmpty()
+
+	hist := sm.Metrics().AppendEmpty()
+	hist.SetName("http.server.request.duration")
+	histDP := hist.SetEmptyHistogram().DataPoints().AppendEmpty()
+	histDP.BucketCounts().FromRaw([]uint64{1, 2, 3})
+	histDP.ExplicitBounds().FromRaw([]float64{0.1, 0.5})
+
+	f := Filter{
+		Signals:             map[model.SignalType]struct{}{model.SignalMetrics: {}},
+		MetricNames:         map[string]struct{}{"http.server.request.duration": {}},
+		BucketCountsCount:   &bucketCount,
+		ExplicitBoundsCount: &explicitBoundsCount,
+	}
+	if !f.MatchMetrics(md) {
+		t.Fatal("expected histogram match for exact bucket_counts/explicit_bounds lengths")
+	}
+
+	wrong := 4
+	f.BucketCountsCount = &wrong
+	if f.MatchMetrics(md) {
+		t.Fatal("expected miss for mismatched bucket_counts length")
+	}
+
+	gauge := sm.Metrics().AppendEmpty()
+	gauge.SetName("cpu.usage")
+	gauge.SetEmptyGauge().DataPoints().AppendEmpty().SetDoubleValue(1)
+	if f.MatchMetric(rm.Resource().Attributes(), sm.Scope().Attributes(), gauge) {
+		t.Fatal("expected non-histogram metric miss when histogram count filters are set")
+	}
+}
+
+func TestFilterMatchMetrics_HistogramCountFiltersAnyDatapoint(t *testing.T) {
+	bucketCount := 3
+
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	sm := rm.ScopeMetrics().AppendEmpty()
+
+	hist := sm.Metrics().AppendEmpty()
+	hist.SetName("http.server.request.duration")
+	dps := hist.SetEmptyHistogram().DataPoints()
+	dp0 := dps.AppendEmpty()
+	dp0.BucketCounts().FromRaw([]uint64{1, 2})
+	dp1 := dps.AppendEmpty()
+	dp1.BucketCounts().FromRaw([]uint64{1, 2, 3})
+
+	f := Filter{
+		Signals:           map[model.SignalType]struct{}{model.SignalMetrics: {}},
+		MetricNames:       map[string]struct{}{"http.server.request.duration": {}},
+		BucketCountsCount: &bucketCount,
+	}
+	if !f.MatchMetrics(md) {
+		t.Fatal("expected match when any histogram datapoint satisfies bucket_counts_count")
+	}
+}
+
 func TestFilterMatchTracesByAttributeNameAcrossLevels(t *testing.T) {
 	td := ptrace.NewTraces()
 	rs := td.ResourceSpans().AppendEmpty()

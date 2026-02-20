@@ -38,6 +38,8 @@ Request example:
   "signals": ["metrics"],
   "metric_names": ["A", "!foo", "!bar"],
   "attribute_names": ["service.name", "http.route"],
+  "bucket_counts_count": 28,
+  "explicit_bounds_count": 29,
   "verbose_metrics": true,
   "max_batches": 15,
   "timeout_seconds": 30
@@ -55,6 +57,9 @@ Example: `attribute_names=["client_name"]` and `metric_names=["!foo","!bar"]` me
 
 Set `verbose_metrics=true` to include histogram datapoint fields `bucket_counts` and `explicit_bounds`.
 By default (`verbose_metrics=false`), those fields are omitted for lower payload size.
+
+Use `bucket_counts_count` and/or `explicit_bounds_count` to filter histogram metrics by datapoint shape.
+Matching rule is exact equality and succeeds when **any** histogram datapoint in the metric matches.
 
 `attribute_names` matches on OTEL attribute keys found in parsed attribute maps across signal structures:
 
